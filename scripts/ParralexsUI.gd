@@ -1,34 +1,48 @@
-[gd_scene load_steps=2 format=3]
+extends PanelContainer
 
-[ext_resource type="res://scripts/ParralexsUI.gd" type="Script" id="1"]
+var choices: Array[Label] = []
+var selected_index: int = 0
 
-[node name="ParralexsUI" type="PanelContainer"]
-custom_minimum_size = Vector2(420, 190)
-script = ExtResource("1")
+func _ready() -> void:
+	add_theme_stylebox_override("panel", _panel_style())
+	var container := get_node_or_null("MarginContainer/VBoxContainer")
+	if container == null:
+		return
+	for child in container.get_children():
+		if child is Label:
+			choices.append(child as Label)
+	_refresh_selection()
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
-layout_mode = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 18
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 18
+func _process(_delta: float) -> void:
+	if not visible or choices.is_empty():
+		return
+	if Input.is_action_just_pressed("ui_up"):
+		selected_index = (selected_index + choices.size() - 1) % choices.size()
+		_refresh_selection()
+	if Input.is_action_just_pressed("ui_down"):
+		selected_index = (selected_index + 1) % choices.size()
+		_refresh_selection()
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
-layout_mode = 2
-alignment = 1
+func _refresh_selection() -> void:
+	for index in range(choices.size()):
+		var label := choices[index]
+		if index == selected_index:
+			label.text = "> " + label.text.trim_prefix("> ")
+			label.add_theme_color_override("font_color", Color("f8ed7d"))
+		else:
+			label.text = "  " + label.text.trim_prefix("> ").trim_prefix("  ")
+			label.add_theme_color_override("font_color", Color.WHITE)
 
-[node name="Choice1" type="Label" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-text = "FIGHT"
-
-[node name="Choice2" type="Label" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-text = "ACT"
-
-[node name="Choice3" type="Label" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-text = "ITEM"
-
-[node name="Choice4" type="Label" parent="MarginContainer/VBoxContainer"]
-layout_mode = 2
-text = "MERCY"
+func _panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("1b1b24")
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.border_color = Color("d4d0d9")
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	return style

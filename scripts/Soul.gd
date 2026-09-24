@@ -1,11 +1,17 @@
-[gd_scene load_steps=2 format=3]
+extends Node2D
 
-[ext_resource type="res://scripts/Soul.gd" type="Script" id="1"]
+@onready var body: Polygon2D = $Body
 
-[node name="Soul" type="Node2D"]
-script = ExtResource("1")
+func _ready() -> void:
+	if body != null:
+		body.color = Color("f0445a")
 
-[node name="Body" type="ColorRect" parent="."]
-color = Color(1, 1, 1, 1)
-offset_right = 18.0
-offset_bottom = 18.0
+func set_size(value: Vector2) -> void:
+	if body == null:
+		return
+	body.polygon = PackedVector2Array([
+		Vector2(-value.x * 0.5, -value.y * 0.5),
+		Vector2(value.x * 0.5, -value.y * 0.5),
+		Vector2(value.x * 0.5, value.y * 0.5),
+		Vector2(-value.x * 0.5, value.y * 0.5)
+	])
