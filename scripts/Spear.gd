@@ -1,5 +1,4 @@
 extends Node2D
-## Spear projectile that bounces inside the battle box instead of disappearing.
 
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 
@@ -72,4 +71,4 @@ func _scan(directory_path: String, files: Array[Dictionary]) -> void:
 				if number_text.is_valid_int():
 					files.append({"path": path, "number": int(number_text)})
 			entry = directory.get_next()
-	 directory.list_dir_end()
+	directory.list_dir_end()

@@ -62,4 +62,4 @@ func _scan(directory_path: String, files: Array[Dictionary]) -> void:
 				if number_text.is_valid_int():
 					files.append({"path": path, "number": int(number_text)})
 			entry = directory.get_next()
-	 directory.list_dir_end()
+	directory.list_dir_end()

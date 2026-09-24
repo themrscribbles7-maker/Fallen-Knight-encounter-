@@ -1,10 +1,8 @@
 extends Node2D
-## Fallen Knight Encounter battle controller.
-## Loads the supplied PNG animation frames at runtime and runs the complete fight.
 
 const VIEW_SIZE := Vector2(1280.0, 720.0)
 const BATTLE_BOX := Rect2(470.0, 180.0, 340.0, 230.0)
-const ANIMATION_FPS := 17.0
+const FPS := 17.0
 const MAX_PLAYER_HP := 100
 const MAX_KNIGHT_HP := 160
 
@@ -13,20 +11,17 @@ var knight: AnimatedSprite2D
 var soul: Node2D
 var blade: Node2D
 var spears: Array[Node2D] = []
-
 var menu_items: Array[String] = ["FIGHT", "ACT", "ITEM", "MERCY"]
 var selected_index := 0
 var battle_state := "menu"
 var state_time := 0.0
 var player_hp := MAX_PLAYER_HP
 var knight_hp := MAX_KNIGHT_HP
-
 var menu_label: Label
 var status_label: Label
 var hp_label: Label
 
 func _ready() -> void:
-	RenderingServer.set_default_clear_color(Color("11111b"))
 	_build_background()
 	player = _create_character("Parralexs", "Parralexs Idle", Vector2(300.0, 300.0), false)
 	knight = _create_character("Knight", "Knight Idle", Vector2(980.0, 300.0), true)
@@ -42,7 +37,6 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	state_time += delta
-
 	match battle_state:
 		"menu":
 			_process_menu()
@@ -57,7 +51,6 @@ func _process(delta: float) -> void:
 		"victory", "defeat":
 			if Input.is_action_just_pressed("ui_accept"):
 				get_tree().reload_current_scene()
-
 	_update_hud()
 
 func _process_menu() -> void:
@@ -76,7 +69,7 @@ func _choose_action() -> void:
 			battle_state = "fight"
 			state_time = 0.0
 			status_label.text = "Press ENTER to attack!"
-			_play_animation(player, "Parralexs attack", "idle")
+			_play_animation(player, "Parralexs attack", "Parralexs Idle")
 		"ACT":
 			knight_hp = max(0, knight_hp - 8)
 			status_label.text = "You study the Knight. Its guard weakens."
@@ -93,13 +86,7 @@ func _finish_player_attack() -> void:
 	var accuracy := absf(fmod(state_time * 0.8, 2.0) - 1.0)
 	var damage := 35 if accuracy < 0.25 else 15
 	knight_hp = max(0, knight_hp - damage)
-	_play_animation(player, "Parralexs attack", "Parralexs Idle")
-
-	if damage == 35:
-		status_label.text = "Direct hit!"
-	else:
-		status_label.text = "A weak hit..."
-
+	status_label.text = "Direct hit!" if damage == 35 else "A weak hit..."
 	if knight_hp <= 0:
 		battle_state = "victory"
 		status_label.text = "VICTORY! Press ENTER to restart."
@@ -114,7 +101,6 @@ func _start_enemy_turn() -> void:
 	soul.position = BATTLE_BOX.get_center()
 	_play_animation(knight, "Knight slash", "Knight Idle")
 	blade = _spawn_blade(Vector2(640.0, 280.0), Vector2(190.0, 125.0))
-
 	for index in range(3):
 		var spawn_position := Vector2(510.0 + index * 150.0, 195.0)
 		spears.append(_spawn_spear(spawn_position, BATTLE_BOX.get_center()))
@@ -124,11 +110,9 @@ func _end_enemy_turn() -> void:
 		if is_instance_valid(spear):
 			spear.queue_free()
 	spears.clear()
-
 	if is_instance_valid(blade):
 		blade.queue_free()
 	blade = null
-
 	soul.visible = false
 	if player_hp <= 0:
 		battle_state = "defeat"
@@ -136,7 +120,7 @@ func _end_enemy_turn() -> void:
 	else:
 		battle_state = "menu"
 		status_label.text = "Choose an action. Enter confirms."
-	_play_animation(knight, "Knight Idle", "idle")
+	_play_animation(knight, "Knight Idle", "Knight Idle")
 
 func _move_soul(delta: float) -> void:
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -159,24 +143,19 @@ func _check_projectile_hits() -> void:
 		player_hp = max(0, player_hp - 10)
 		status_label.text = "Hit! Keep moving!"
 		blade.position = Vector2(-1000.0, -1000.0)
-
 	for spear in spears:
 		if is_instance_valid(spear) and spear.global_position.distance_to(soul.global_position) < 24.0:
 			player_hp = max(0, player_hp - 10)
 			status_label.text = "Hit! Keep moving!"
-			_safely_reset_projectile(spear)
+			spear.reset_position()
 
-func _safely_reset_projectile(projectile: Node2D) -> void:
-	if projectile.has_method("reset_position"):
-		projectile.reset_position()
-
-func _create_character(character_name: String, prefix: String, position_value: Vector2, flip: bool) -> AnimatedSprite2D:
+func _create_character(character_name: String, prefix: String, character_position: Vector2, flip: bool) -> AnimatedSprite2D:
 	var sprite := AnimatedSprite2D.new()
 	sprite.name = character_name
-	sprite.position = position_value
+	sprite.position = character_position
 	sprite.flip_h = flip
 	sprite.sprite_frames = _build_frames(prefix)
-	if sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
+	if sprite.sprite_frames.get_frame_count("idle") > 0:
 		sprite.play("idle")
 	add_child(sprite)
 	return sprite
@@ -184,7 +163,7 @@ func _create_character(character_name: String, prefix: String, position_value: V
 func _build_frames(prefix: String) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.add_animation("idle")
-	frames.set_animation_speed("idle", ANIMATION_FPS)
+	frames.set_animation_speed("idle", FPS)
 	frames.set_animation_loop("idle", true)
 	var found: Array[Dictionary] = []
 	_scan_pngs("res://", prefix, found)
@@ -214,8 +193,8 @@ func _scan_pngs(directory_path: String, prefix: String, found: Array[Dictionary]
 					var suffix := stem.substr(prefix.length()).strip_edges()
 					if suffix.is_valid_int():
 						found.append({"path": full_path, "number": int(suffix)})
-		entry = directory.get_next()
-	 directory.list_dir_end()
+			entry = directory.get_next()
+	directory.list_dir_end()
 
 func _play_animation(sprite: AnimatedSprite2D, prefix: String, fallback_prefix: String) -> void:
 	var frames := _build_frames(prefix)
@@ -225,18 +204,18 @@ func _play_animation(sprite: AnimatedSprite2D, prefix: String, fallback_prefix: 
 		sprite.sprite_frames = frames
 		sprite.play("idle")
 
-func _spawn_blade(position_value: Vector2, velocity_value: Vector2) -> Node2D:
+func _spawn_blade(spawn_position: Vector2, velocity_value: Vector2) -> Node2D:
 	var projectile := preload("res://scenes/SpinBlade.tscn").instantiate() as Node2D
-	projectile.position = position_value
+	projectile.position = spawn_position
 	projectile.set_velocity(velocity_value)
 	projectile.set_bounds(BATTLE_BOX)
 	add_child(projectile)
 	return projectile
 
-func _spawn_spear(position_value: Vector2, target: Vector2) -> Node2D:
+func _spawn_spear(spawn_position: Vector2, target: Vector2) -> Node2D:
 	var projectile := preload("res://scenes/Spear.tscn").instantiate() as Node2D
-	projectile.position = position_value
-	projectile.set_velocity((target - position_value).normalized() * 180.0)
+	projectile.position = spawn_position
+	projectile.set_velocity((target - spawn_position).normalized() * 180.0)
 	projectile.set_bounds(BATTLE_BOX)
 	add_child(projectile)
 	return projectile
