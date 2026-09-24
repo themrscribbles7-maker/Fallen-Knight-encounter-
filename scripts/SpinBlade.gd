@@ -1,102 +1,25 @@
 extends Node2D
-
-# Reusable projectile that can be reused for the Spin Blade attack.
-# It reads numbered PNGs from res:// and assembles them into a single animation.
-
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
-
-var velocity: Vector2 = Vector2(1.2, 0.75).normalized() * 180.0
-var bounds: Rect2 = Rect2(Vector2(500, 180), Vector2(280, 200))
-var active: bool = true
-
+var velocity := Vector2(180, 120)
+var bounds := Rect2(470, 180, 340, 230)
 func _ready() -> void:
-	if sprite == null:
-		return
-	var animated := _build_animation_frames()
-	if animated:
-		sprite.sprite_frames = animated
-		sprite.animation = "spin"
-		sprite.autoplay = "spin"
-		sprite.play("spin")
+	var f := SpriteFrames.new(); f.add_animation("spin"); f.set_animation_speed("spin", 17); f.set_animation_loop("spin", true)
+	for path in _pngs("res://"):
+		if path.get_file().get_basename().to_lower().begins_with("spin blade"):
+			f.add_frame("spin", load(path))
+	if f.get_frame_count("spin") > 0: sprite.sprite_frames = f; sprite.play("spin")
 	else:
-		sprite.modulate = Color(1.0, 0.9, 0.5, 1.0)
-		var rect := ColorRect.new()
-		rect.size = Vector2(18, 18)
-		rect.color = Color(1.0, 0.9, 0.45, 1.0)
-		sprite.add_child(rect)
-
+		var c := ColorRect.new(); c.size = Vector2(22,22); c.color = Color("f7d77b"); add_child(c)
 func _process(delta: float) -> void:
-	if not active:
-		return
 	position += velocity * delta
-	var min_x := bounds.position.x
-	var max_x := bounds.position.x + bounds.size.x
-	var min_y := bounds.position.y
-	var max_y := bounds.position.y + bounds.size.y
-	if position.x <= min_x or position.x >= max_x:
-		velocity.x *= -1.0
-		position.x = clamp(position.x, min_x, max_x)
-	if position.y <= min_y or position.y >= max_y:
-		velocity.y *= -1.0
-		position.y = clamp(position.y, min_y, max_y)
-	if sprite:
-		sprite.rotation += 0.18
-	var current_speed := velocity.length()
-	if current_speed > 0.0:
-		velocity = velocity.normalized() * min(current_speed + 0.2, 420.0)
-
-func set_velocity(value: Vector2) -> void:
-	velocity = value
-
-func set_bounds(value: Rect2) -> void:
-	bounds = value
-
-func _build_animation_frames() -> SpriteFrames:
-	var frames := SpriteFrames.new()
-	frames.add_animation("spin")
-	frames.set_animation_loop("spin", true)
-	frames.set_animation_speed("spin", 17.0)
-	var matches: Array[Dictionary] = []
-	for path in _all_png_paths("res://"):
-		var base := path.get_file().get_basename().to_lower()
-		if not base.begins_with("spin blade"):
-			continue
-		var number := _trailing_number(base)
-		if number >= 0:
-			matches.append({"number": number, "path": path})
-	matches.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return a["number"] < b["number"]
-	)
-	for item in matches:
-		var texture := load(item["path"]) as Texture2D
-		if texture:
-			frames.add_frame("spin", texture)
-	if frames.get_frame_count("spin") > 0:
-		return frames
-	return null
-
-func _all_png_paths(directory: String) -> Array[String]:
-	var result: Array[String] = []
-	var dir := DirAccess.open(directory)
-	if not dir:
-		return result
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.begins_with("."):
-			file_name = dir.get_next()
-			continue
-		var path := directory.path_join(file_name)
-		if dir.current_is_dir():
-			result.append_array(_all_png_paths(path))
-		elif file_name.to_lower().ends_with(".png"):
-			result.append(path)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-	return result
-
-func _trailing_number(text: String) -> int:
-	var regex := RegEx.new()
-	regex.compile("(\\d+)$")
-	var result := regex.search(text)
-	return int(result.get_string(1)) if result else -1
+	if position.x <= bounds.position.x or position.x >= bounds.end.x: velocity.x *= -1
+	if position.y <= bounds.position.y or position.y >= bounds.end.y: velocity.y *= -1
+	if sprite: sprite.rotation += delta * 8
+func set_velocity(v: Vector2) -> void: velocity = v
+func set_bounds(r: Rect2) -> void: bounds = r
+func _pngs(dir: String) -> Array[String]:
+	var out: Array[String] = []; var d := DirAccess.open(dir); if not d: return out; d.list_dir_begin(); var n := d.get_next()
+	while n != "":
+		if not n.begins_with("."): out.append_array(_pngs(dir.path_join(n)) if d.current_is_dir() else ([dir.path_join(n)] if n.to_lower().ends_with(".png") else []))
+		n = d.get_next()
+	d.list_dir_end(); return out
