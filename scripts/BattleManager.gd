@@ -1,207 +1,163 @@
-extends Node2D
+extends Node
 
-# Core battle layout and character setup.
-# This scene hosts the actors, custom UI, battle box, and soul.
+# Core battle flow controller for the boss encounter.
+# Handles the normal state, enemy-turn state, battle box opening,
+# Soul movement, and simple projectile collision.
 
-const FPS := 17.0
-const SCREEN_SIZE := Vector2(1280, 720)
-const ASSET_ROOT := "res://"
-
-var battle_manager: Node
+var battle_scene: Node2D
 var parralexs_actor: AnimatedSprite2D
 var knight_actor: AnimatedSprite2D
 var battle_box: Node2D
 var soul: Node2D
 var ui_root: PanelContainer
-var status_label: Label
 
-func _ready() -> void:
-	RenderingServer.set_default_clear_color(Color("101018"))
-	_build_background()
-	_create_layout()
-	_setup_battle_manager()
-	status_label = Label.new()
-	status_label.text = "Fallen Knight Encounter"
-	status_label.position = Vector2(40, 30)
-	status_label.add_theme_font_size_override("font_size", 22)
-	add_child(status_label)
+var phase: String = "normal"
+var phase_timer: float = 0.0
+var open_delay: float = 0.8
+var attack_delay: float = 1.1
+var projectiles: Array[Node2D] = []
+var attack_started: bool = false
 
-func _create_layout() -> void:
-	parralexs_actor = _make_actor("Parralexs", Vector2(280, 300), Color("8d75b5"), true)
-	knight_actor = _make_actor("Knight", Vector2(990, 300), Color("a73b45"), false)
+func configure(scene: Node2D, parralexs: AnimatedSprite2D, knight: AnimatedSprite2D, ui: PanelContainer, box: Node2D, soul_node: Node2D) -> void:
+	battle_scene = scene
+	parralexs_actor = parralexs
+	knight_actor = knight
+	ui_root = ui
+	battle_box = box
+	soul = soul_node
+	if ui_root:
+		ui_root.visible = true
 
-	var ui_scene := load("res://scenes/ParralexsUI.tscn") as PackedScene
-	if ui_scene:
-		ui_root = ui_scene.instantiate()
-		ui_root.position = Vector2(150, 470)
-		add_child(ui_root)
-	else:
-		ui_root = PanelContainer.new()
-		ui_root.position = Vector2(150, 470)
-		ui_root.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		ui_root.add_theme_stylebox_override("panel", _make_panel_style())
-		add_child(ui_root)
+func begin_normal_battle() -> void:
+	phase = "normal"
+	phase_timer = 0.0
+	attack_started = false
+	_clear_projectiles()
+	_set_battle_box_visible(false)
+	_set_soul_visible(false)
+	if ui_root:
+		ui_root.visible = true
 
-	var box_scene := load("res://scenes/BattleBox.tscn") as PackedScene
-	if box_scene:
-		battle_box = box_scene.instantiate()
-		battle_box.position = Vector2(480, 170)
-		battle_box.visible = false
-		add_child(battle_box)
-	else:
-		battle_box = Node2D.new()
-		battle_box.position = Vector2(480, 170)
-		battle_box.visible = false
-		add_child(battle_box)
-		var rect := ColorRect.new()
-		rect.size = Vector2(320, 220)
-		rect.position = Vector2.ZERO
-		rect.color = Color("2e2e38")
-		battle_box.add_child(rect)
-
-	var soul_scene := load("res://scenes/Soul.tscn") as PackedScene
-	if soul_scene:
-		soul = soul_scene.instantiate()
-		soul.visible = false
+func begin_enemy_turn() -> void:
+	phase = "opening"
+	phase_timer = 0.0
+	attack_started = false
+	_clear_projectiles()
+	_set_battle_box_visible(true)
+	_set_soul_visible(true)
+	if soul:
 		soul.position = Vector2(620, 300)
-		add_child(soul)
+	if knight_actor:
+		_knight_opening_animation()
+	if ui_root:
+		ui_root.visible = false
+
+func end_enemy_turn() -> void:
+	phase = "normal"
+	phase_timer = 0.0
+	attack_started = false
+	_clear_projectiles()
+	_set_battle_box_visible(false)
+	_set_soul_visible(false)
+	if ui_root:
+		ui_root.visible = true
+
+func _process(delta: float) -> void:
+	if phase == "normal":
+		if Input.is_action_just_pressed("ui_accept"):
+			begin_enemy_turn()
+		return
+	if phase == "opening":
+		phase_timer += delta
+		if phase_timer >= open_delay:
+			phase = "enemy_turn"
+			phase_timer = 0.0
+			_start_attack_pattern()
+		return
+	if phase == "enemy_turn":
+		phase_timer += delta
+		_move_soul(delta)
+		_check_projectile_collisions()
+		if phase_timer >= attack_delay:
+			phase = "normal"
+			end_enemy_turn()
+		return
+
+func _knight_opening_animation() -> void:
+	if knight_actor and knight_actor.sprite_frames and knight_actor.sprite_frames.has_animation("Knight_Open_Battle_Box"):
+		knight_actor.animation = "Knight_Open_Battle_Box"
+		knight_actor.play("Knight_Open_Battle_Box")
+
+func _start_attack_pattern() -> void:
+	# Basic enemy-turn projectile pattern.
+	_create_spin_blade(Vector2(620, 260), Vector2(1.2, 0.75))
+	attack_started = true
+
+func _create_spin_blade(position: Vector2, velocity: Vector2) -> void:
+	var scene := load("res://scenes/SpinBlade.tscn") as PackedScene
+	var projectile: Node2D
+	if scene:
+		projectile = scene.instantiate()
 	else:
-		soul = Node2D.new()
-		soul.visible = false
-		soul.position = Vector2(620, 300)
-		add_child(soul)
-		var circle := ColorRect.new()
-		circle.size = Vector2(18, 18)
-		circle.color = Color("ffffff")
-		soul.add_child(circle)
+		projectile = Node2D.new()
+		var sprite := ColorRect.new()
+		sprite.size = Vector2(18, 18)
+		sprite.color = Color("f7d77b")
+		projectile.add_child(sprite)
+	projectile.position = position
+	if projectile.has_method("set_velocity"):
+		projectile.set_velocity(velocity * 180.0)
+	if projectile.has_method("set_bounds"):
+		projectile.set_bounds(Rect2(Vector2(500, 180), Vector2(280, 200)))
+	battle_scene.add_child(projectile)
+	projectiles.append(projectile)
 
-func _setup_battle_manager() -> void:
-	battle_manager = load("res://scripts/BattleManager.gd").new()
-	battle_manager.set_meta("battle_scene", self)
-	add_child(battle_manager)
-	battle_manager.configure(self, parralexs_actor, knight_actor, ui_root, battle_box, soul)
-	battle_manager.begin_normal_battle()
-
-func _build_background() -> void:
-	var background_texture := _find_single_asset(["background"])
-	if background_texture:
-		var background := Sprite2D.new()
-		background.texture = background_texture
-		background.position = SCREEN_SIZE / 2.0
-		background.centered = true
-		background.scale = _cover_scale(background_texture.get_size(), SCREEN_SIZE)
-		background.z_index = -10
-		add_child(background)
-	else:
-		var fallback := ColorRect.new()
-		fallback.color = Color("181824")
-		fallback.position = Vector2.ZERO
-		fallback.size = SCREEN_SIZE
-		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fallback.z_index = -10
-		add_child(fallback)
-
-func _make_actor(actor_name: String, position: Vector2, fallback_color: Color, is_player: bool) -> AnimatedSprite2D:
-	var actor := AnimatedSprite2D.new()
-	actor.name = actor_name
-	actor.position = position
-	actor.sprite_frames = _make_idle_frames(actor_name)
-	if actor.sprite_frames and actor.sprite_frames.has_animation("idle"):
-		actor.animation = "idle"
-		actor.autoplay = "idle"
-		actor.play()
-		actor.z_index = 2
-	else:
-		var marker := Polygon2D.new()
-		marker.polygon = PackedVector2Array([Vector2(-40, -60), Vector2(40, -60), Vector2(40, 60), Vector2(-40, 60)])
-		marker.color = fallback_color
-		actor.add_child(marker)
-		actor.z_index = 2
-	add_child(actor)
-	return actor
-
-func _make_idle_frames(actor_name: String) -> SpriteFrames:
-	var frames := SpriteFrames.new()
-	frames.remove_animation("default")
-	frames.add_animation("idle")
-	frames.set_animation_speed("idle", FPS)
-	frames.set_animation_loop("idle", true)
-	var textures := _find_numbered_frames(actor_name + " idle")
-	for texture in textures:
-		frames.add_frame("idle", texture)
-	return frames
-
-func _find_numbered_frames(prefix: String) -> Array[Texture2D]:
-	var matches: Array[Dictionary] = []
-	for path in _all_png_paths(ASSET_ROOT):
-		var base := path.get_file().get_basename().to_lower()
-		var wanted := prefix.to_lower()
-		if not base.begins_with(wanted):
+func _check_projectile_collisions() -> void:
+	if not soul:
+		return
+	for projectile in projectiles:
+		if projectile == null or not is_instance_valid(projectile):
 			continue
-		var number := _trailing_number(base)
-		if number >= 0:
-			matches.append({"number": number, "path": path})
-	matches.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.number < b.number)
-	var result: Array[Texture2D] = []
-	for item in matches:
-		var texture := load(item.path) as Texture2D
-		if texture:
-			result.append(texture)
-	return result
+		if projectile.global_position.distance_to(soul.global_position) < 24.0:
+			projectile.queue_free()
+			projectiles.erase(projectile)
+			return
 
-func _find_single_asset(words: Array[String]) -> Texture2D:
-	for path in _all_png_paths(ASSET_ROOT):
-		var base := path.get_file().get_basename().to_lower()
-		var found := true
-		for word in words:
-			if not base.contains(word.to_lower()):
-				found = false
-		if found:
-			return load(path) as Texture2D
-	return null
+func _move_soul(delta: float) -> void:
+	if not soul:
+		return
+	var input_vector := Vector2.ZERO
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		input_vector.y -= 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		input_vector.y += 1.0
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		input_vector.x -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		input_vector.x += 1.0
+	if input_vector.length() > 0.0:
+		input_vector = input_vector.normalized()
+	var speed := 220.0
+	var next_position := soul.position + input_vector * speed * delta
+	var box_rect := Rect2(Vector2(500, 180), Vector2(280, 200))
+	next_position.x = clamp(next_position.x, box_rect.position.x + 12, box_rect.position.x + box_rect.size.x - 12)
+	next_position.y = clamp(next_position.y, box_rect.position.y + 12, box_rect.position.y + box_rect.size.y - 12)
+	soul.position = next_position
 
-func _all_png_paths(directory: String) -> Array[String]:
-	var result: Array[String] = []
-	var dir := DirAccess.open(directory)
-	if not dir:
-		return result
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.begins_with("."):
-			file_name = dir.get_next()
-			continue
-		var path := directory.path_join(file_name)
-		if dir.current_is_dir():
-			result.append_array(_all_png_paths(path))
-		elif file_name.to_lower().ends_with(".png"):
-			result.append(path)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-	return result
+func _clear_projectiles() -> void:
+	for projectile in projectiles:
+		if is_instance_valid(projectile):
+			projectile.queue_free()
+	projectiles.clear()
 
-func _trailing_number(text: String) -> int:
-	var regex := RegEx.new()
-	regex.compile("(\\d+)$")
-	var result := regex.search(text)
-	return int(result.get_string(1)) if result else -1
+func _set_battle_box_visible(visible: bool) -> void:
+	if not battle_box:
+		return
+	battle_box.visible = visible
+	for child in battle_box.get_children():
+		if child is CanvasItem:
+			child.visible = visible
 
-func _cover_scale(texture_size: Vector2, target_size: Vector2) -> Vector2:
-	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
-		return Vector2.ONE
-	var scale := max(target_size.x / texture_size.x, target_size.y / texture_size.y)
-	return Vector2(scale, scale)
-
-func _make_panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("20202a")
-	style.border_width_bottom = 2
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_color = Color("7c7b8d")
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_right = 10
-	style.corner_radius_bottom_left = 10
-	return style
+func _set_soul_visible(visible: bool) -> void:
+	if soul:
+		soul.visible = visible
