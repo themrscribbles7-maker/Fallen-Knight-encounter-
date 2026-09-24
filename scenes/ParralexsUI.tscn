@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[node name="BattleBox" type="Node2D"]
+
+[node name="Frame" type="ColorRect" parent="."]
+color = Color(0.23, 0.23, 0.30, 1)
+offset_right = 280.0
+offset_bottom = 200.0
+
+[node name="Inner" type="ColorRect" parent="."]
+position = Vector2(12, 12)
+color = Color(0.10, 0.11, 0.15, 1)
+offset_right = 256.0
+offset_bottom = 176.0
