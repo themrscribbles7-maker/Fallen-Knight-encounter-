@@ -1,163 +1,138 @@
-extends Node
+extends Node2D
 
-# Core battle flow controller for the boss encounter.
-# Handles the normal state, enemy-turn state, battle box opening,
-# Soul movement, and simple projectile collision.
+# Reusable spin blade projectile used for the Fallen Knight's enemy-turn attack.
+# The projectile itself handles movement and wall rebounds. The battle manager
+# handles the attack flow and collision timing.
 
-var battle_scene: Node2D
-var parralexs_actor: AnimatedSprite2D
-var knight_actor: AnimatedSprite2D
-var battle_box: Node2D
-var soul: Node2D
-var ui_root: PanelContainer
+signal rebound
+signal hit_player
 
-var phase: String = "normal"
-var phase_timer: float = 0.0
-var open_delay: float = 0.8
-var attack_delay: float = 1.1
-var projectiles: Array[Node2D] = []
-var attack_started: bool = false
+@onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 
-func configure(scene: Node2D, parralexs: AnimatedSprite2D, knight: AnimatedSprite2D, ui: PanelContainer, box: Node2D, soul_node: Node2D) -> void:
-	battle_scene = scene
-	parralexs_actor = parralexs
-	knight_actor = knight
-	ui_root = ui
-	battle_box = box
-	soul = soul_node
-	if ui_root:
-		ui_root.visible = true
+var velocity: Vector2 = Vector2(1.2, 0.75).normalized() * 180.0
+var bounds: Rect2 = Rect2(Vector2(500, 180), Vector2(280, 200))
+var active: bool = true
+var max_speed: float = 420.0
+var rebound_count: int = 0
 
-func begin_normal_battle() -> void:
-	phase = "normal"
-	phase_timer = 0.0
-	attack_started = false
-	_clear_projectiles()
-	_set_battle_box_visible(false)
-	_set_soul_visible(false)
-	if ui_root:
-		ui_root.visible = true
-
-func begin_enemy_turn() -> void:
-	phase = "opening"
-	phase_timer = 0.0
-	attack_started = false
-	_clear_projectiles()
-	_set_battle_box_visible(true)
-	_set_soul_visible(true)
-	if soul:
-		soul.position = Vector2(620, 300)
-	if knight_actor:
-		_knight_opening_animation()
-	if ui_root:
-		ui_root.visible = false
-
-func end_enemy_turn() -> void:
-	phase = "normal"
-	phase_timer = 0.0
-	attack_started = false
-	_clear_projectiles()
-	_set_battle_box_visible(false)
-	_set_soul_visible(false)
-	if ui_root:
-		ui_root.visible = true
+func _ready() -> void:
+	if sprite == null:
+		var fallback := ColorRect.new()
+		fallback.size = Vector2(18, 18)
+		fallback.color = Color(1.0, 0.9, 0.45, 1.0)
+		add_child(fallback)
+		return
+	var frames := _build_animation_frames()
+	if frames:
+		sprite.sprite_frames = frames
+		sprite.animation = "spin"
+		sprite.autoplay = "spin"
+		sprite.play("spin")
+	else:
+		sprite.modulate = Color(1.0, 0.8, 0.5, 1.0)
+		var rect := ColorRect.new()
+		rect.size = Vector2(18, 18)
+		rect.color = Color(1.0, 0.9, 0.45, 1.0)
+		sprite.add_child(rect)
 
 func _process(delta: float) -> void:
-	if phase == "normal":
-		if Input.is_action_just_pressed("ui_accept"):
-			begin_enemy_turn()
-		return
-	if phase == "opening":
-		phase_timer += delta
-		if phase_timer >= open_delay:
-			phase = "enemy_turn"
-			phase_timer = 0.0
-			_start_attack_pattern()
-		return
-	if phase == "enemy_turn":
-		phase_timer += delta
-		_move_soul(delta)
-		_check_projectile_collisions()
-		if phase_timer >= attack_delay:
-			phase = "normal"
-			end_enemy_turn()
+	if not active:
 		return
 
-func _knight_opening_animation() -> void:
-	if knight_actor and knight_actor.sprite_frames and knight_actor.sprite_frames.has_animation("Knight_Open_Battle_Box"):
-		knight_actor.animation = "Knight_Open_Battle_Box"
-		knight_actor.play("Knight_Open_Battle_Box")
+	position += velocity * delta
 
-func _start_attack_pattern() -> void:
-	# Basic enemy-turn projectile pattern.
-	_create_spin_blade(Vector2(620, 260), Vector2(1.2, 0.75))
-	attack_started = true
+	var min_x := bounds.position.x
+	var max_x := bounds.position.x + bounds.size.x
+	var min_y := bounds.position.y
+	var max_y := bounds.position.y + bounds.size.y
+	var hit_wall := false
 
-func _create_spin_blade(position: Vector2, velocity: Vector2) -> void:
-	var scene := load("res://scenes/SpinBlade.tscn") as PackedScene
-	var projectile: Node2D
-	if scene:
-		projectile = scene.instantiate()
-	else:
-		projectile = Node2D.new()
-		var sprite := ColorRect.new()
-		sprite.size = Vector2(18, 18)
-		sprite.color = Color("f7d77b")
-		projectile.add_child(sprite)
-	projectile.position = position
-	if projectile.has_method("set_velocity"):
-		projectile.set_velocity(velocity * 180.0)
-	if projectile.has_method("set_bounds"):
-		projectile.set_bounds(Rect2(Vector2(500, 180), Vector2(280, 200)))
-	battle_scene.add_child(projectile)
-	projectiles.append(projectile)
+	if position.x <= min_x:
+		position.x = min_x
+		velocity.x = abs(velocity.x)
+		hit_wall = true
+	elif position.x >= max_x:
+		position.x = max_x
+		velocity.x = -abs(velocity.x)
+		hit_wall = true
 
-func _check_projectile_collisions() -> void:
-	if not soul:
-		return
-	for projectile in projectiles:
-		if projectile == null or not is_instance_valid(projectile):
+	if position.y <= min_y:
+		position.y = min_y
+		velocity.y = abs(velocity.y)
+		hit_wall = true
+	elif position.y >= max_y:
+		position.y = max_y
+		velocity.y = -abs(velocity.y)
+		hit_wall = true
+
+	if sprite:
+		sprite.rotation += 0.18
+
+	if hit_wall:
+		rebound_count += 1
+		var speed := velocity.length()
+		if speed > 0.0:
+			velocity = velocity.normalized() * min(speed + 32.0, max_speed)
+		emit_signal("rebound")
+
+func set_velocity(value: Vector2) -> void:
+	velocity = value
+
+func set_bounds(value: Rect2) -> void:
+	bounds = value
+
+func _build_animation_frames() -> SpriteFrames:
+	var frames := SpriteFrames.new()
+	frames.add_animation("spin")
+	frames.set_animation_loop("spin", true)
+	frames.set_animation_speed("spin", 17.0)
+
+	var matches: Array[Dictionary] = []
+	for path in _all_png_paths("res://"):
+		var base := path.get_file().get_basename().to_lower()
+		if not base.begins_with("spin blade"):
 			continue
-		if projectile.global_position.distance_to(soul.global_position) < 24.0:
-			projectile.queue_free()
-			projectiles.erase(projectile)
-			return
+		var number := _trailing_number(base)
+		if number >= 0:
+			matches.append({"number": number, "path": path})
 
-func _move_soul(delta: float) -> void:
-	if not soul:
-		return
-	var input_vector := Vector2.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		input_vector.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		input_vector.y += 1.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		input_vector.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		input_vector.x += 1.0
-	if input_vector.length() > 0.0:
-		input_vector = input_vector.normalized()
-	var speed := 220.0
-	var next_position := soul.position + input_vector * speed * delta
-	var box_rect := Rect2(Vector2(500, 180), Vector2(280, 200))
-	next_position.x = clamp(next_position.x, box_rect.position.x + 12, box_rect.position.x + box_rect.size.x - 12)
-	next_position.y = clamp(next_position.y, box_rect.position.y + 12, box_rect.position.y + box_rect.size.y - 12)
-	soul.position = next_position
+	matches.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["number"] < b["number"]
+	)
 
-func _clear_projectiles() -> void:
-	for projectile in projectiles:
-		if is_instance_valid(projectile):
-			projectile.queue_free()
-	projectiles.clear()
+	for item in matches:
+		var texture := load(item["path"]) as Texture2D
+		if texture:
+			frames.add_frame("spin", texture)
 
-func _set_battle_box_visible(visible: bool) -> void:
-	if not battle_box:
-		return
-	battle_box.visible = visible
-	for child in battle_box.get_children():
-		if child is CanvasItem:
-			child.visible = visible
+	if frames.get_frame_count("spin") > 0:
+		return frames
+	return null
 
-func _set_soul_visible(visible: bool) -> void:
-	if soul:
-		soul.visible = visible
+func _all_png_paths(directory: String) -> Array[String]:
+	var result: Array[String] = []
+	var dir := DirAccess.open(directory)
+	if not dir:
+		return result
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if file_name.begins_with("."):
+			file_name = dir.get_next()
+			continue
+
+		var path := directory.path_join(file_name)
+		if dir.current_is_dir():
+			result.append_array(_all_png_paths(path))
+		elif file_name.to_lower().ends_with(".png"):
+			result.append(path)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	return result
+
+func _trailing_number(text: String) -> int:
+	var regex := RegEx.new()
+	regex.compile("(\\d+)$")
+	var result := regex.search(text)
+	return int(result.get_string(1)) if result else -1

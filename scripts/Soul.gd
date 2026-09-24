@@ -1,16 +1,11 @@
-extends Node2D
+[gd_scene load_steps=2 format=3]
 
-# Simple player soul object. The battle manager controls movement and visibility.
-# This allows the soul to be a reusable scene while keeping gameplay logic clean.
+[ext_resource type="res://scripts/Soul.gd" type="Script" id="1"]
 
-@onready var body: ColorRect = $Body
+[node name="Soul" type="Node2D"]
+script = ExtResource("1")
 
-func _ready() -> void:
-	if body:
-		body.size = Vector2(18, 18)
-		body.color = Color(1.0, 1.0, 1.0, 1.0)
-	visible = false
-
-func set_size(value: Vector2) -> void:
-	if body:
-		body.size = value
+[node name="Body" type="ColorRect" parent="."]
+color = Color(1, 1, 1, 1)
+offset_right = 18.0
+offset_bottom = 18.0
